@@ -1,0 +1,17 @@
+audio:
+  target_sample_rate: 48000
+  mono: true
+spectrogram:
+  n_fft: 1024
+  hop_length: 256
+  window: hann
+  frequency_scale: linear
+  n_mels: 128
+amplitude:
+  scale: db
+  ref: max
+  top_db: 80
+image:
+  height: 480
+  width: 640
+  cmap: gray_r
