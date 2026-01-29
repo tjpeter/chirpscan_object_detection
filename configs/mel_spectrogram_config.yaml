@@ -1,0 +1,17 @@
+audio:
+  target_sample_rate: 48000
+  mono: true
+spectrogram:
+  frequency_scale: "mel"  
+  n_mels: 128  # Number of mel bands (already configured)
+  n_fft: 2048
+  hop_length: 512
+  window: "hann"
+amplitude:
+  scale: db
+  ref: max
+  top_db: 80
+image:
+  height: 480
+  width: 640
+  cmap: gray_r

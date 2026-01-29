@@ -53,6 +53,10 @@ def visualize_sample(
         config: Spectrogram configuration dict
         use_original_sr: If True, use original sample rate (no resampling) for debugging
     """
+    # Get original sample rate first
+    import librosa
+    original_sr = librosa.get_samplerate(str(audio_path))
+    
     # Load audio - use ORIGINAL sample rate for validation
     if use_original_sr:
         target_sr = None  # None = keep original sample rate
@@ -71,7 +75,7 @@ def visualize_sample(
         top_db=config["amplitude"]["top_db"],
     )
 
-    print(f"  Sample rate: {sr} Hz (original: {use_original_sr})")
+    print(f"  Sample rate: {sr} Hz (original: {original_sr} Hz)")
 
     freq_bins, time_frames = S_db.shape
     img_width = config["image"]["width"]
@@ -175,8 +179,6 @@ def visualize_sample(
     
     # Frequency axis: 5000 Hz intervals with thousand separator
     # With origin="lower", y=0 is at bottom, so frequency increases upward
-    freq_step = 5000  # Hz
-    num_freq_ticks = int(max_freq / freq_step) + 1
     
     if config["spectrogram"]["frequency_scale"] == "mel":
         # For mel scale, frequencies are non-linearly spaced
@@ -188,10 +190,21 @@ def visualize_sample(
         mel_freqs = librosa.mel_frequencies(n_mels=n_mels + 2, fmin=0.0, fmax=max_freq)
         
         # Find mel bin positions for each frequency tick
+        # Use 1000 Hz steps up to 10000 Hz, then 5000 Hz steps
         freq_positions = []
         freq_labels = []
-        for i in range(num_freq_ticks):
-            target_freq = i * freq_step
+        target_freqs = []
+        
+        # 0 to 10000 Hz: 1000 Hz steps
+        for freq in range(0, min(11000, int(max_freq) + 1), 1000):
+            target_freqs.append(freq)
+        
+        # Above 10000 Hz: 5000 Hz steps
+        if max_freq > 10000:
+            for freq in range(15000, int(max_freq) + 1, 5000):
+                target_freqs.append(freq)
+        
+        for target_freq in target_freqs:
             if target_freq <= max_freq:
                 # Find which mel bin this frequency corresponds to
                 mel_bin = np.searchsorted(mel_freqs, target_freq)
@@ -200,7 +213,9 @@ def visualize_sample(
                 freq_positions.append(y_pos)
                 freq_labels.append(f"{target_freq:,}")
     else:
-        # Linear scale: straightforward mapping
+        # Linear scale: straightforward mapping with 5000 Hz steps
+        freq_step = 5000
+        num_freq_ticks = int(max_freq / freq_step) + 1
         freq_positions = [(i * freq_step / max_freq) * img_height for i in range(num_freq_ticks)]
         freq_labels = [f"{i * freq_step:,}" for i in range(num_freq_ticks)]
     
@@ -208,7 +223,10 @@ def visualize_sample(
     ax.set_yticklabels(freq_labels)
     
     
-    sr_label = f"{sr}Hz (original)" if use_original_sr else f"{sr}Hz (resampled)"
+    if use_original_sr:
+        sr_label = f"{sr}Hz (original)"
+    else:
+        sr_label = f"{sr}Hz (resampled from {original_sr}Hz)"
     ax.set_title(f"Spectrogram: {audio_path.name} | SR: {sr_label}")
 
     # Add bounding box info text below the plot
@@ -323,6 +341,9 @@ def main() -> None:
     print(f"\nVisualization mode: {'ORIGINAL sample rate (no resampling)' if use_original_sr else 'RESAMPLED to target SR'}")
     print(f"Visualizing {len(sampled_files)} samples...\n")
 
+    # Track successfully visualized files
+    visualized_files = []
+
     # Process each sampled file
     for file_name in sampled_files:
         group = grouped.get_group(file_name)
@@ -366,11 +387,26 @@ def main() -> None:
                 config,
                 use_original_sr=use_original_sr,
             )
+            visualized_files.append(file_name)
         except Exception as e:
             print(f"Error processing {file_name}: {e}")
             import traceback
             traceback.print_exc()
             continue
+
+    # Write comma-separated file names to text file
+    if visualized_files:
+        file_list_path = args.output_dir / "visualized_files.txt"
+        
+        # Natural sort to match filesystem order
+        import re
+        def natural_sort_key(s):
+            return [int(text) if text.isdigit() else text.lower() 
+                    for text in re.split(r'(\d+)', s)]
+        
+        with open(file_list_path, "w") as f:
+            f.write(", ".join(sorted(visualized_files, key=natural_sort_key)))
+        print(f"\n📝 Saved file list: {file_list_path}")
 
     print(f"\n✅ Visualization complete! Check {args.output_dir}/ for results")
     print("\nMANUAL VALIDATION CHECKLIST:")
